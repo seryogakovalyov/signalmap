@@ -10,8 +10,8 @@ class CategorySeeder extends Seeder
     public function run(): void
     {
         $categories = [
-            ['name' => 'Infrastructure', 'color' => '#dc2626'],
-            ['name' => 'Safety', 'color' => '#ea580c'],
+            ['name' => 'Infrastructure', 'color' => '#eab308'],
+            ['name' => 'Safety', 'color' => '#dc2626'],
             ['name' => 'Environment', 'color' => '#16a34a'],
             ['name' => 'Traffic', 'color' => '#2563eb'],
             ['name' => 'Community', 'color' => '#7c3aed'],
