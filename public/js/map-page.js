@@ -946,6 +946,29 @@
             return;
         }
 
+        const syncPopupVoteControls = () => {
+            popupRoot.querySelectorAll('[data-vote-action]').forEach((control) => {
+                const reportId = Number(control.dataset.reportId);
+                const voteAction = control.dataset.voteAction;
+                const report = reportState.get(reportId);
+
+                if (!report || !voteAction) {
+                    return;
+                }
+
+                if (voteAction === 'confirm') {
+                    control.disabled = hasVotedForAction(reportId, 'confirm') || !report.can_confirm;
+                    return;
+                }
+
+                if (voteAction === 'clear') {
+                    control.disabled = hasVotedForAction(reportId, 'clear') || report.status === 'resolved';
+                }
+            });
+        };
+
+        syncPopupVoteControls();
+
         if (popupRoot.dataset.voteHandlerBound === '1') {
             return;
         }
@@ -966,6 +989,7 @@
             }
 
             if (hasVotedForAction(reportId, voteAction)) {
+                showMessage(errorBox, `You have already submitted a ${voteAction} vote for this report.`);
                 return;
             }
 
@@ -987,6 +1011,7 @@
                     if (response.status === 409) {
                         rememberVote(reportId, voteAction);
                         updateMarkerPopup(reportId);
+                        syncPopupVoteControls();
                     }
 
                     if (response.status === 403 && voteAction === 'confirm') {
@@ -996,6 +1021,7 @@
                             currentReport.can_confirm = false;
                             reportState.set(reportId, currentReport);
                             updateMarkerPopup(reportId);
+                            syncPopupVoteControls();
                         }
                     }
 
@@ -1017,6 +1043,7 @@
 
                 reportState.set(reportId, body.data);
                 updateMarkerPopup(reportId);
+                syncPopupVoteControls();
             } catch (error) {
                 popupRoot.querySelectorAll('[data-vote-action]').forEach((control) => {
                     control.disabled = false;
