@@ -90,7 +90,7 @@ class DemoReportsSeeder extends Seeder
             $report = Report::query()->create([
                 'title' => $title,
                 'description' => sprintf(
-                    '%s observed near %.4f, %.4f. Community verification requested.',
+                    '%s observed near %.4f, %.4f.',
                     $title,
                     $location['lat'],
                     $location['lng']
