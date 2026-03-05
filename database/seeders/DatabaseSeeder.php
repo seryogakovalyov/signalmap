@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             CategorySeeder::class,
+            DemoReportsSeeder::class,
         ]);
 
         User::query()->updateOrCreate(
