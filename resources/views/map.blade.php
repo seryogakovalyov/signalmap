@@ -61,17 +61,8 @@
                 </select>
             </label>
 
-            <div class="coordinates">
-                <label>
-                    Latitude
-                    <input type="number" step="0.0000001" name="latitude" readonly required>
-                </label>
-
-                <label>
-                    Longitude
-                    <input type="number" step="0.0000001" name="longitude" readonly required>
-                </label>
-            </div>
+            <input type="hidden" name="latitude" required>
+            <input type="hidden" name="longitude" required>
 
             <button class="report-submit-button" type="submit" {{ $categories->isEmpty() ? 'disabled' : '' }}>Submit Report</button>
         </form>
