@@ -58,6 +58,7 @@ class WorldReports10kSeeder extends Seeder
         while ($remaining > 0) {
             $batchSize = min(self::BATCH_SIZE, $remaining);
             $rows = [];
+            $lastReportId = (int) DB::table('reports')->max('id');
 
             for ($index = 0; $index < $batchSize; $index++) {
                 $hub = self::WORLD_HUBS[array_rand(self::WORLD_HUBS)];
@@ -90,7 +91,46 @@ class WorldReports10kSeeder extends Seeder
             }
 
             DB::table('reports')->insert($rows);
+            $this->seedSyntheticConfirmVotes($lastReportId, $batchSize, $now);
             $remaining -= $batchSize;
+        }
+    }
+
+    private function seedSyntheticConfirmVotes(int $lastReportId, int $batchSize, Carbon $timestamp): void
+    {
+        $insertedReports = DB::table('reports')
+            ->select(['id', 'confirmations_count'])
+            ->where('id', '>', $lastReportId)
+            ->orderBy('id')
+            ->limit($batchSize)
+            ->get();
+
+        $voteRows = [];
+
+        foreach ($insertedReports as $report) {
+            $confirmations = (int) $report->confirmations_count;
+
+            if ($confirmations <= 0) {
+                continue;
+            }
+
+            for ($counter = 0; $counter < $confirmations; $counter++) {
+                $voteRows[] = [
+                    'report_id' => $report->id,
+                    'vote_type' => 'confirm',
+                    'ip_hash' => hash('sha256', fake()->ipv4()),
+                    'browser_id' => (string) Str::uuid(),
+                    'created_at' => $timestamp,
+                ];
+            }
+        }
+
+        if ($voteRows === []) {
+            return;
+        }
+
+        foreach (array_chunk($voteRows, 5000) as $chunk) {
+            DB::table('report_votes')->insert($chunk);
         }
     }
 
