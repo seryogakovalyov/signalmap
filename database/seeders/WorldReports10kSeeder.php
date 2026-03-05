@@ -58,7 +58,6 @@ class WorldReports10kSeeder extends Seeder
         while ($remaining > 0) {
             $batchSize = min(self::BATCH_SIZE, $remaining);
             $rows = [];
-            $lastReportId = (int) DB::table('reports')->max('id');
 
             for ($index = 0; $index < $batchSize; $index++) {
                 $hub = self::WORLD_HUBS[array_rand(self::WORLD_HUBS)];
@@ -91,47 +90,43 @@ class WorldReports10kSeeder extends Seeder
             }
 
             DB::table('reports')->insert($rows);
-            $this->seedSyntheticConfirmVotes($lastReportId, $batchSize, $now);
             $remaining -= $batchSize;
         }
+
+        $this->seedSyntheticConfirmVotes($now);
     }
 
-    private function seedSyntheticConfirmVotes(int $lastReportId, int $batchSize, Carbon $timestamp): void
+    private function seedSyntheticConfirmVotes(Carbon $timestamp): void
     {
-        $insertedReports = DB::table('reports')
+        DB::table('reports')
             ->select(['id', 'confirmations_count'])
-            ->where('id', '>', $lastReportId)
+            ->where('confirmations_count', '>', 0)
             ->orderBy('id')
-            ->limit($batchSize)
-            ->get();
+            ->chunkById(1000, function ($reports) use ($timestamp): void {
+                $voteRows = [];
 
-        $voteRows = [];
+                foreach ($reports as $report) {
+                    $confirmations = (int) $report->confirmations_count;
 
-        foreach ($insertedReports as $report) {
-            $confirmations = (int) $report->confirmations_count;
+                    for ($counter = 0; $counter < $confirmations; $counter++) {
+                        $voteRows[] = [
+                            'report_id' => $report->id,
+                            'vote_type' => 'confirm',
+                            'ip_hash' => hash('sha256', fake()->ipv4()),
+                            'browser_id' => (string) Str::uuid(),
+                            'created_at' => $timestamp,
+                        ];
+                    }
+                }
 
-            if ($confirmations <= 0) {
-                continue;
-            }
+                if ($voteRows === []) {
+                    return;
+                }
 
-            for ($counter = 0; $counter < $confirmations; $counter++) {
-                $voteRows[] = [
-                    'report_id' => $report->id,
-                    'vote_type' => 'confirm',
-                    'ip_hash' => hash('sha256', fake()->ipv4()),
-                    'browser_id' => (string) Str::uuid(),
-                    'created_at' => $timestamp,
-                ];
-            }
-        }
-
-        if ($voteRows === []) {
-            return;
-        }
-
-        foreach (array_chunk($voteRows, 5000) as $chunk) {
-            DB::table('report_votes')->insert($chunk);
-        }
+                foreach (array_chunk($voteRows, 5000) as $chunk) {
+                    DB::table('report_votes')->insert($chunk);
+                }
+            });
     }
 
     private function clamp(float $value, float $min, float $max): float

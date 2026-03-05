@@ -336,6 +336,24 @@
         clusterLayer.clearLayers();
     };
 
+    const getOpenedPopupReportId = () => {
+        const popupElement = map._popup?.getElement?.();
+
+        if (!popupElement) {
+            return null;
+        }
+
+        const voteButton = popupElement.querySelector('[data-report-id]');
+
+        if (!voteButton) {
+            return null;
+        }
+
+        const reportId = Number(voteButton.getAttribute('data-report-id'));
+
+        return Number.isFinite(reportId) && reportId > 0 ? reportId : null;
+    };
+
     const buildClusterIndex = () => {
         if (!supportsSupercluster) {
             return;
@@ -406,6 +424,7 @@
     };
 
     const fetchReports = async () => {
+        const openedPopupReportId = getOpenedPopupReportId();
         const bounds = map.getBounds();
         const zoom = Math.round(map.getZoom());
         const bbox = [
@@ -457,6 +476,10 @@
             reportState.forEach((report) => {
                 upsertMarker(report);
             });
+        }
+
+        if (openedPopupReportId && reportMarkers.has(openedPopupReportId)) {
+            reportMarkers.get(openedPopupReportId)?.openPopup();
         }
 
         fetchReportsController = null;
