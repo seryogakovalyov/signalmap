@@ -39,6 +39,7 @@
     const markersLayer = L.layerGroup().addTo(map);
     const reportMarkers = new Map();
     const reportState = new Map();
+    let geocoderResultMarker = null;
     let draftMarker = null;
     let lastRequestedBbox = null;
     let fetchReportsController = null;
@@ -89,6 +90,13 @@
         iconSize: [18, 18],
         iconAnchor: [9, 9],
         popupAnchor: [0, -9],
+    });
+
+    const createGeocoderResultIcon = () => L.divIcon({
+        className: 'geocoder-result-icon',
+        html: '<span aria-hidden="true"></span>',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
     });
 
     const statusMeta = (status) => {
@@ -522,6 +530,330 @@
     });
 
     map.addControl(new CurrentLocationControl());
+
+    if (window.L.Control.Geocoder) {
+        // Keep plugin UI control, but route all network requests through our own autosuggest logic
+        // to avoid duplicate requests and Nominatim rate-limit spikes.
+        const silentGeocoder = {
+            geocode(_query, callback, context) {
+                if (typeof callback === 'function') {
+                    callback.call(context, []);
+                }
+            },
+            suggest(_query, callback, context) {
+                if (typeof callback === 'function') {
+                    callback.call(context, []);
+                }
+            },
+            reverse(_location, _scale, callback, context) {
+                if (typeof callback === 'function') {
+                    callback.call(context, []);
+                }
+            },
+        };
+
+        const applyGeocodeSelection = (center, bbox = null) => {
+            if (bbox && bbox.isValid && bbox.isValid()) {
+                map.fitBounds(bbox, {
+                    padding: [24, 24],
+                    maxZoom: 16,
+                });
+            } else {
+                map.setView(center, 16);
+            }
+
+            if (geocoderResultMarker) {
+                map.removeLayer(geocoderResultMarker);
+            }
+
+            geocoderResultMarker = L.marker(center, {
+                icon: createGeocoderResultIcon(),
+                keyboard: false,
+            }).addTo(map);
+        };
+
+        const geocoder = L.Control.geocoder({
+            geocoder: silentGeocoder,
+            defaultMarkGeocode: false,
+            collapsed: false,
+            position: 'topleft',
+            placeholder: 'Search address or place...',
+            errorMessage: 'Address not found.',
+            queryMinLength: 3,
+            suggestMinLength: 999,
+            suggestTimeout: 200,
+        })
+            .on('markgeocode', (event) => {
+                applyGeocodeSelection(event.geocode.center, event.geocode.bbox);
+            })
+            .addTo(map);
+
+        const geocoderContainer = geocoder.getContainer();
+        const geocoderInput = geocoderContainer?.querySelector('.leaflet-control-geocoder-form input');
+        if (geocoderInput) {
+            const nativeAlternatives = geocoderContainer?.querySelector('.leaflet-control-geocoder-alternatives');
+            if (nativeAlternatives) {
+                nativeAlternatives.remove();
+            }
+
+            geocoderInput.setAttribute('placeholder', 'Search address or place...');
+            geocoderInput.setAttribute('aria-label', 'Search address or place');
+            geocoderInput.setAttribute('autocomplete', 'off');
+            geocoderInput.setAttribute('role', 'combobox');
+            geocoderInput.setAttribute('aria-expanded', 'false');
+            geocoderInput.setAttribute('aria-autocomplete', 'list');
+
+            const suggestionList = document.createElement('ul');
+            suggestionList.className = 'geocoder-suggestions';
+            suggestionList.hidden = true;
+            suggestionList.id = 'map-geocoder-suggestions';
+            suggestionList.setAttribute('role', 'listbox');
+            geocoderInput.setAttribute('aria-controls', suggestionList.id);
+            geocoder.getContainer()?.appendChild(suggestionList);
+
+            let suggestionsAbortController = null;
+            let suggestionsTimer = null;
+            let highlightedSuggestionIndex = -1;
+            let currentSuggestions = [];
+            let suggestionsBlockedUntil = 0;
+
+            const applySuggestionSelection = (item) => {
+                geocoderInput.value = item.display_name;
+                hideSuggestions();
+
+                const lat = Number(item.lat);
+                const lon = Number(item.lon);
+                const center = L.latLng(lat, lon);
+
+                let bbox = null;
+                if (Array.isArray(item.boundingbox) && item.boundingbox.length === 4) {
+                    const south = Number(item.boundingbox[0]);
+                    const north = Number(item.boundingbox[1]);
+                    const west = Number(item.boundingbox[2]);
+                    const east = Number(item.boundingbox[3]);
+
+                    if ([south, north, west, east].every(Number.isFinite)) {
+                        bbox = L.latLngBounds(
+                            [south, west],
+                            [north, east],
+                        );
+                    }
+                }
+
+                applyGeocodeSelection(center, bbox);
+            };
+
+            const syncHighlightedSuggestion = () => {
+                const buttons = suggestionList.querySelectorAll('.geocoder-suggestion-item');
+
+                buttons.forEach((button, index) => {
+                    const isActive = index === highlightedSuggestionIndex;
+                    button.classList.toggle('is-active', isActive);
+                    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+
+                    if (isActive) {
+                        geocoderInput.setAttribute('aria-activedescendant', button.id);
+                        button.scrollIntoView({
+                            block: 'nearest',
+                        });
+                    }
+                });
+
+                if (highlightedSuggestionIndex < 0) {
+                    geocoderInput.removeAttribute('aria-activedescendant');
+                }
+            };
+
+            const hideSuggestions = () => {
+                suggestionList.hidden = true;
+                suggestionList.innerHTML = '';
+                currentSuggestions = [];
+                highlightedSuggestionIndex = -1;
+                geocoderInput.setAttribute('aria-expanded', 'false');
+                geocoderInput.removeAttribute('aria-activedescendant');
+            };
+
+            const renderSuggestions = (items) => {
+                suggestionList.innerHTML = '';
+                currentSuggestions = items;
+                highlightedSuggestionIndex = -1;
+
+                if (!items.length) {
+                    hideSuggestions();
+                    return;
+                }
+
+                items.forEach((item, index) => {
+                    const li = document.createElement('li');
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'geocoder-suggestion-item';
+                    button.id = `map-geocoder-option-${index}`;
+                    button.setAttribute('role', 'option');
+                    button.setAttribute('aria-selected', 'false');
+                    button.textContent = item.display_name;
+
+                    button.addEventListener('click', () => {
+                        applySuggestionSelection(item);
+                    });
+
+                    button.addEventListener('mouseenter', () => {
+                        highlightedSuggestionIndex = index;
+                        syncHighlightedSuggestion();
+                    });
+
+                    li.appendChild(button);
+                    suggestionList.appendChild(li);
+                });
+
+                suggestionList.hidden = false;
+                geocoderInput.setAttribute('aria-expanded', 'true');
+            };
+
+            const fetchSuggestions = async (query) => {
+                if (Date.now() < suggestionsBlockedUntil) {
+                    hideSuggestions();
+                    return;
+                }
+
+                if (suggestionsAbortController) {
+                    suggestionsAbortController.abort();
+                }
+
+                suggestionsAbortController = new AbortController();
+
+                const bounds = map.getBounds();
+                const viewbox = [
+                    bounds.getWest(),
+                    bounds.getNorth(),
+                    bounds.getEast(),
+                    bounds.getSouth(),
+                ].join(',');
+                const params = new URLSearchParams({
+                    q: query,
+                    format: 'jsonv2',
+                    addressdetails: '1',
+                    limit: '8',
+                    'accept-language': 'uk,ru,en',
+                    viewbox,
+                    bounded: '0',
+                });
+
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+                    signal: suggestionsAbortController.signal,
+                    headers: {
+                        Accept: 'application/json',
+                    },
+                });
+
+                if (!response.ok) {
+                    if (response.status === 429) {
+                        suggestionsBlockedUntil = Date.now() + 60000;
+                    }
+
+                    hideSuggestions();
+                    return;
+                }
+
+                const payload = await response.json();
+                renderSuggestions(Array.isArray(payload) ? payload : []);
+            };
+
+            const scheduleSuggestions = (query) => {
+                if (suggestionsTimer) {
+                    window.clearTimeout(suggestionsTimer);
+                }
+
+                if (query.trim().length < 3) {
+                    hideSuggestions();
+                    return;
+                }
+
+                suggestionsTimer = window.setTimeout(() => {
+                    fetchSuggestions(query.trim()).catch((error) => {
+                        if (error.name !== 'AbortError') {
+                            hideSuggestions();
+                        }
+                    });
+                }, 380);
+            };
+
+            geocoderInput.addEventListener('input', (event) => {
+                scheduleSuggestions(event.target.value || '');
+            });
+
+            geocoderInput.addEventListener('focus', (event) => {
+                scheduleSuggestions(event.target.value || '');
+            });
+
+            geocoderInput.addEventListener('keydown', (event) => {
+                const hasSuggestions = !suggestionList.hidden && currentSuggestions.length > 0;
+
+                if (event.key === 'Escape' && hasSuggestions) {
+                    event.preventDefault();
+                    hideSuggestions();
+                    return;
+                }
+
+                if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+
+                    if (!hasSuggestions) {
+                        scheduleSuggestions(geocoderInput.value || '');
+                        return;
+                    }
+
+                    highlightedSuggestionIndex =
+                        highlightedSuggestionIndex < currentSuggestions.length - 1
+                            ? highlightedSuggestionIndex + 1
+                            : 0;
+                    syncHighlightedSuggestion();
+                    return;
+                }
+
+                if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+
+                    if (!hasSuggestions) {
+                        scheduleSuggestions(geocoderInput.value || '');
+                        return;
+                    }
+
+                    highlightedSuggestionIndex =
+                        highlightedSuggestionIndex > 0
+                            ? highlightedSuggestionIndex - 1
+                            : currentSuggestions.length - 1;
+                    syncHighlightedSuggestion();
+                    return;
+                }
+
+                if (event.key === 'Enter' && hasSuggestions && highlightedSuggestionIndex >= 0) {
+                    event.preventDefault();
+                    applySuggestionSelection(currentSuggestions[highlightedSuggestionIndex]);
+                }
+            });
+
+            // Prevent the plugin's internal Enter handler from triggering its own geocode request.
+            geocoderInput.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter') {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+            }, true);
+
+            geocoderInput.addEventListener('blur', () => {
+                window.setTimeout(hideSuggestions, 140);
+            });
+
+            L.DomEvent.disableScrollPropagation(suggestionList);
+            L.DomEvent.disableClickPropagation(suggestionList);
+            L.DomEvent.on(suggestionList, 'wheel', L.DomEvent.stopPropagation);
+            L.DomEvent.on(suggestionList, 'touchstart', L.DomEvent.stopPropagation);
+            L.DomEvent.on(suggestionList, 'touchmove', L.DomEvent.stopPropagation);
+        }
+    }
 
     map.on('click', (event) => {
         clearMessages();
