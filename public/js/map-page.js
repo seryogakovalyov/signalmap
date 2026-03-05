@@ -339,11 +339,15 @@
         reportState.delete(reportId);
     };
 
-    const clearRenderedMarkers = () => {
-        reportMarkers.forEach((marker) => {
+    const clearRenderedMarkers = (preserveReportId = null) => {
+        reportMarkers.forEach((marker, reportId) => {
+            if (preserveReportId && reportId === preserveReportId) {
+                return;
+            }
+
             markersLayer.removeLayer(marker);
+            reportMarkers.delete(reportId);
         });
-        reportMarkers.clear();
         clusterLayer.clearLayers();
     };
 
@@ -397,12 +401,12 @@
         clusterIndex.load(points);
     };
 
-    const renderViewportFromClusterIndex = () => {
+    const renderViewportFromClusterIndex = (preserveReportId = null) => {
         if (!supportsSupercluster || !clusterIndex) {
             return;
         }
 
-        clearRenderedMarkers();
+        clearRenderedMarkers(preserveReportId);
 
         const bounds = map.getBounds();
         const zoom = Math.round(map.getZoom());
@@ -443,6 +447,10 @@
     const fetchReports = async () => {
         const openedPopupReportId = skipPopupRestoreOnce ? null : getOpenedPopupReportId();
         skipPopupRestoreOnce = false;
+        const previousOpenedReport =
+            openedPopupReportId && reportState.has(openedPopupReportId)
+                ? reportState.get(openedPopupReportId)
+                : null;
         const bounds = map.getBounds();
         const zoom = Math.round(map.getZoom());
         const bbox = [
@@ -479,25 +487,46 @@
         }
 
         const payload = await response.json();
+        const nextReports = Array.isArray(payload.data) ? payload.data : [];
+
         reportState.clear();
-        (Array.isArray(payload.data) ? payload.data : []).forEach((report) => {
+        nextReports.forEach((report) => {
             if (report.status !== 'resolved') {
                 reportState.set(report.id, report);
             }
         });
 
+        // Keep currently opened report in state during rapid map interactions even when
+        // the latest bounded response omits it (e.g. limit trimming or transient bounds changes).
+        if (
+            openedPopupReportId &&
+            !reportState.has(openedPopupReportId) &&
+            previousOpenedReport &&
+            previousOpenedReport.status !== 'resolved'
+        ) {
+            reportState.set(openedPopupReportId, previousOpenedReport);
+        }
+
+        const popupReportIdToPreserve =
+            openedPopupReportId && reportState.has(openedPopupReportId) ? openedPopupReportId : null;
+
+        if (!popupReportIdToPreserve && openedPopupReportId) {
+            removeMarker(openedPopupReportId);
+            map.closePopup();
+        }
+
         if (supportsSupercluster) {
             buildClusterIndex();
-            renderViewportFromClusterIndex();
+            renderViewportFromClusterIndex(popupReportIdToPreserve);
         } else {
-            clearRenderedMarkers();
+            clearRenderedMarkers(popupReportIdToPreserve);
             reportState.forEach((report) => {
                 upsertMarker(report);
             });
         }
 
-        if (openedPopupReportId && reportMarkers.has(openedPopupReportId)) {
-            reportMarkers.get(openedPopupReportId)?.openPopup();
+        if (popupReportIdToPreserve && reportMarkers.has(popupReportIdToPreserve)) {
+            reportMarkers.get(popupReportIdToPreserve)?.openPopup();
         }
 
         fetchReportsController = null;
@@ -1120,7 +1149,8 @@
         persistCurrentMapView();
 
         if (supportsSupercluster && clusterIndex) {
-            renderViewportFromClusterIndex();
+            const openedPopupReportId = getOpenedPopupReportId();
+            renderViewportFromClusterIndex(openedPopupReportId);
         }
     });
 
@@ -1254,10 +1284,6 @@
                 showMessage(errorBox, error.message || 'Unable to record your vote.');
             }
         });
-    });
-
-    map.on('popupclose', () => {
-        skipPopupRestoreOnce = true;
     });
 
     const initializeMapLocation = () => {
