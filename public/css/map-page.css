@@ -228,6 +228,27 @@ textarea {
     background: rgba(255, 255, 255, 0.96);
 }
 
+.leaflet-control-container .leaflet-top.leaflet-left,
+.leaflet-control-container .leaflet-left.leaflet-top {
+    display: flex !important;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.45rem;
+    padding: 0.65rem 0 0 0.65rem;
+}
+
+.leaflet-control-container .leaflet-top.leaflet-left .leaflet-control-geocoder,
+.leaflet-control-container .leaflet-left.leaflet-top .leaflet-control-geocoder {
+    order: 1 !important;
+    margin: 0 !important;
+}
+
+.leaflet-control-container .leaflet-top.leaflet-left .leaflet-control-zoom,
+.leaflet-control-container .leaflet-left.leaflet-top .leaflet-control-zoom {
+    order: 2 !important;
+    margin: 0 !important;
+}
+
 .leaflet-control-geocoder form {
     display: flex;
     align-items: center;
@@ -391,6 +412,7 @@ textarea {
         width: min(300px, 84vw);
         max-height: min(38vh, 260px);
     }
+
 }
 
 @media (max-width: 600px) {
