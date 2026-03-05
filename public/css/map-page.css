@@ -247,6 +247,9 @@ textarea {
 }
 
 .leaflet-control-geocoder {
+    display: flex;
+    align-items: center;
+    gap: 0.28rem;
     width: min(320px, calc(100vw - 2.5rem));
     max-width: 320px;
     padding: 0.28rem;
@@ -269,6 +272,11 @@ textarea {
     align-items: center;
     margin: 0;
     gap: 0.28rem;
+    min-width: 0;
+}
+
+.leaflet-control-geocoder-form {
+    flex: 1 1 auto;
     min-width: 0;
 }
 

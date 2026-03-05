@@ -1,7 +1,6 @@
 @extends('layouts.app')
 
 @push('styles')
-<link rel="stylesheet" href="{{ asset('css/map-page.css') }}">
 <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -11,6 +10,7 @@
     rel="stylesheet"
     href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css"
     crossorigin="">
+<link rel="stylesheet" href="{{ asset('css/map-page.css') }}">
 @endpush
 
 @push('scripts')
