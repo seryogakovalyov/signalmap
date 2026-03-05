@@ -67,14 +67,7 @@
             <button class="report-submit-button" type="submit" {{ $categories->isEmpty() ? 'disabled' : '' }}>Submit Report</button>
         </form>
 
-        <div class="legend" aria-label="Category legend">
-            @foreach ($categories as $category)
-            <div class="legend-item">
-                <span class="legend-swatch" style="background: {{ $category->color }}"></span>
-                <span>{{ $category->name }}</span>
-            </div>
-            @endforeach
-        </div>
+        <div class="legend" id="category-legend" aria-label="Category legend"></div>
 
         <div class="utility-links">
             @auth

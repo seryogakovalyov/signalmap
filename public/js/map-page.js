@@ -13,6 +13,7 @@
     const hint = document.getElementById('map-hint');
     const successBox = document.getElementById('success-message');
     const errorBox = document.getElementById('error-message');
+    const legendElement = document.getElementById('category-legend');
     const submitButton = form.querySelector('button[type="submit"]');
     const latInput = form.querySelector('input[name="latitude"]');
     const lngInput = form.querySelector('input[name="longitude"]');
@@ -26,6 +27,13 @@
     const viewportStorageKey = 'civic-reports:last-map-view';
     const voteStorageKey = 'civic-reports:session-votes';
     const fetchDebounceMs = 200;
+    const categoryIcons = {
+        community: '👥',
+        environment: '🌿',
+        infrastructure: '🏢',
+        safety: '⚠️',
+        traffic: '🚗',
+    };
 
     const map = L.map('report-map', {
         zoomControl: false,
@@ -88,22 +96,52 @@
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
 
-    const createCategoryIcon = (color) => L.divIcon({
-        className: '',
+    const normalizeCategoryKey = (value) => String(value || '')
+        .trim()
+        .toLowerCase()
+        .replaceAll(/[^a-z0-9]+/g, '-');
+    const categoryEmoji = (categoryName) => categoryIcons[normalizeCategoryKey(categoryName)] || '📍';
+
+    const renderLegend = () => {
+        if (!legendElement) {
+            return;
+        }
+
+        legendElement.innerHTML = '';
+
+        categories.forEach((category) => {
+            const item = document.createElement('div');
+            item.className = 'legend-item';
+
+            const swatch = document.createElement('span');
+            swatch.className = 'legend-swatch';
+            swatch.style.background = category.color;
+
+            const icon = document.createElement('span');
+            icon.className = 'legend-icon';
+            icon.textContent = categoryEmoji(category.name);
+            icon.setAttribute('aria-hidden', 'true');
+
+            const label = document.createElement('span');
+            label.textContent = category.name;
+
+            item.appendChild(swatch);
+            item.appendChild(icon);
+            item.appendChild(label);
+            legendElement.appendChild(item);
+        });
+    };
+
+    const createCategoryIcon = (color, icon) => L.divIcon({
+        className: 'category-marker-icon',
         html: `
-            <span style="
-                display:block;
-                width:18px;
-                height:18px;
-                border-radius:999px;
-                background:${color};
-                border:3px solid rgba(255,255,255,0.95);
-                box-shadow:0 10px 18px rgba(15,23,42,0.18);
-            "></span>
+            <span class="category-marker-dot" style="background:${escapeHtml(color)};">
+                <span class="category-marker-emoji" aria-hidden="true">${escapeHtml(icon)}</span>
+            </span>
         `,
-        iconSize: [18, 18],
-        iconAnchor: [9, 9],
-        popupAnchor: [0, -9],
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+        popupAnchor: [0, -12],
     });
 
     const createGeocoderResultIcon = () => L.divIcon({
@@ -178,6 +216,10 @@
     const markerPopup = (report) => `
         <div class="report-popup-content" style="min-width:240px;max-width:100%;">
             <strong class="report-popup-title" style="display:block;margin-bottom:0.4rem;">${escapeHtml(report.title)}</strong>
+            <div style="display:flex;align-items:center;gap:0.35rem;margin-bottom:0.45rem;font-size:0.9rem;color:#475569;">
+                <span aria-hidden="true">${escapeHtml(categoryEmoji(report.category?.name))}</span>
+                <strong>${escapeHtml(report.category?.name || 'Uncategorized')}</strong>
+            </div>
             <div class="report-popup-description" style="margin-bottom:0.6rem;line-height:1.45;">${escapeHtml(report.description)}</div>
             <div style="margin-bottom:0.35rem;font-size:0.9rem;">
                 <strong>Status:</strong>
@@ -236,17 +278,18 @@
         reportState.set(report.id, report);
 
         const color = report.category?.color || '#2563eb';
+        const icon = categoryEmoji(report.category?.name);
         const existingMarker = reportMarkers.get(report.id);
 
         if (existingMarker) {
             existingMarker.setLatLng([report.latitude, report.longitude]);
-            existingMarker.setIcon(createCategoryIcon(color));
+            existingMarker.setIcon(createCategoryIcon(color, icon));
             existingMarker.setPopupContent(markerPopup(report));
             return;
         }
 
         const marker = L.marker([report.latitude, report.longitude], {
-            icon: createCategoryIcon(color),
+            icon: createCategoryIcon(color, icon),
         })
             .bindPopup(markerPopup(report))
             .addTo(markersLayer);
@@ -1125,5 +1168,6 @@
         }
     });
 
+    renderLegend();
     initializeMapLocation();
 }());
