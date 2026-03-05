@@ -55,15 +55,46 @@
             color: var(--primary);
         }
 
-        .logout button {
-            border: 0;
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .header-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             border-radius: 999px;
-            padding: 0.7rem 1rem;
+            min-height: 2.55rem;
+            padding: 0.65rem 1.15rem;
             font: inherit;
             font-weight: 700;
+            line-height: 1;
+            text-decoration: none;
             cursor: pointer;
+        }
+
+        .map-link {
+            border: 1px solid rgba(15, 118, 110, 0.3);
+            color: var(--primary);
+            background: #fff;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+        }
+
+        .map-link:hover,
+        .map-link:focus {
+            background: #f0fdfa;
+            outline: none;
+        }
+
+        .logout-button {
+            border: 0;
             background: #0f172a;
             color: #fff;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.16);
         }
 
         .card {
@@ -291,6 +322,15 @@
         }
 
         @media (max-width: 900px) {
+            .header {
+                align-items: stretch;
+            }
+
+            .header-actions {
+                width: 100%;
+                justify-content: flex-start;
+            }
+
             .reports-table,
             .reports-table thead,
             .reports-table tbody,
@@ -344,10 +384,14 @@
                 <p>Review community submissions and either publish them to the public map or reject them.</p>
             </div>
 
-            <form class="logout" method="POST" action="{{ route('logout') }}">
-                @csrf
-                <button type="submit">Log out</button>
-            </form>
+            <div class="header-actions">
+                <a class="header-button map-link" href="{{ route('map.index') }}">Back to map</a>
+
+                <form class="logout" method="POST" action="{{ route('logout') }}">
+                    @csrf
+                    <button class="header-button logout-button" type="submit">Log out</button>
+                </form>
+            </div>
         </div>
 
         @if (session('status'))
