@@ -38,7 +38,7 @@
 
     const map = L.map('report-map', {
         zoomControl: false,
-        closePopupOnClick: false,
+        closePopupOnClick: true,
     });
     const mobileControlsMediaQuery = window.matchMedia('(max-width: 767.98px)');
     let zoomControl = null;
