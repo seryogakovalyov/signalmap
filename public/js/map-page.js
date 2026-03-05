@@ -28,8 +28,10 @@
     const fetchDebounceMs = 200;
 
     const map = L.map('report-map', {
-        zoomControl: true,
+        zoomControl: false,
     });
+    const mobileControlsMediaQuery = window.matchMedia('(max-width: 767.98px)');
+    let zoomControl = null;
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
@@ -46,6 +48,18 @@
     let fetchReportsTimer = null;
     let currentUserLocation = null;
     let suppressViewportPersistence = false;
+
+    const mountZoomControl = () => {
+        const nextPosition = mobileControlsMediaQuery.matches ? 'bottomleft' : 'bottomright';
+
+        if (zoomControl) {
+            map.removeControl(zoomControl);
+        }
+
+        zoomControl = L.control.zoom({
+            position: nextPosition,
+        }).addTo(map);
+    };
 
     const showMessage = (target, text) => {
         target.textContent = text;
@@ -505,7 +519,7 @@
 
     const CurrentLocationControl = L.Control.extend({
         options: {
-            position: 'topright',
+            position: 'bottomright',
         },
         onAdd() {
             const button = L.DomUtil.create('button', 'map-location-button');
@@ -530,6 +544,12 @@
     });
 
     map.addControl(new CurrentLocationControl());
+
+    if (mobileControlsMediaQuery.addEventListener) {
+        mobileControlsMediaQuery.addEventListener('change', mountZoomControl);
+    } else if (mobileControlsMediaQuery.addListener) {
+        mobileControlsMediaQuery.addListener(mountZoomControl);
+    }
 
     if (window.L.Control.Geocoder) {
         // Keep plugin UI control, but route all network requests through our own autosuggest logic
@@ -854,6 +874,8 @@
             L.DomEvent.on(suggestionList, 'touchmove', L.DomEvent.stopPropagation);
         }
     }
+
+    mountZoomControl();
 
     map.on('click', (event) => {
         clearMessages();
