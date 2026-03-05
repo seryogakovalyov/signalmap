@@ -209,7 +209,7 @@ textarea {
     font-weight: 700;
     line-height: 1;
     padding: 0;
-    cursor: pointer;
+    cursor: pointer !important;
     box-shadow: 0 10px 22px rgba(15, 23, 42, 0.14);
     text-align: center;
 }
