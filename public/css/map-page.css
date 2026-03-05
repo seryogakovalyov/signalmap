@@ -217,8 +217,8 @@ textarea {
 .map-location-button {
     border: 1px solid rgba(148, 163, 184, 0.35);
     border-radius: 999px;
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -501,6 +501,21 @@ textarea {
     justify-content: center;
     line-height: 1;
     font-size: 0.7rem;
+}
+
+.current-location-icon {
+    background: transparent;
+    border: 0;
+}
+
+.current-location-dot {
+    display: block;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    border: 3px solid rgba(255, 255, 255, 0.95);
+    background: #3b82f6;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.22);
 }
 
 .map-cluster {

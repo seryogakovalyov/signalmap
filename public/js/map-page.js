@@ -60,6 +60,9 @@
     let fetchReportsController = null;
     let fetchReportsTimer = null;
     let currentUserLocation = null;
+    let currentUserLocationAccuracy = null;
+    let currentLocationMarker = null;
+    let currentLocationAccuracyCircle = null;
     let suppressViewportPersistence = false;
     let skipNextMoveendFetch = false;
     let skipPopupRestoreOnce = false;
@@ -154,6 +157,13 @@
     const createGeocoderResultIcon = () => L.divIcon({
         className: 'geocoder-result-icon',
         html: '<span aria-hidden="true"></span>',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+    });
+
+    const createCurrentLocationIcon = () => L.divIcon({
+        className: 'current-location-icon',
+        html: '<span class="current-location-dot" aria-hidden="true"></span>',
         iconSize: [20, 20],
         iconAnchor: [10, 10],
     });
@@ -636,10 +646,54 @@
         }
     };
 
+    const updateCurrentLocationOverlay = (coordinates, accuracyMeters = null) => {
+        if (!currentLocationMarker) {
+            currentLocationMarker = L.marker(coordinates, {
+                icon: createCurrentLocationIcon(),
+                keyboard: false,
+            }).addTo(map);
+        } else {
+            currentLocationMarker.setLatLng(coordinates);
+        }
+
+        if (Number.isFinite(accuracyMeters) && accuracyMeters > 0) {
+            if (!currentLocationAccuracyCircle) {
+                currentLocationAccuracyCircle = L.circle(coordinates, {
+                    radius: accuracyMeters,
+                    color: '#3b82f6',
+                    weight: 1.5,
+                    opacity: 0.7,
+                    fillColor: '#60a5fa',
+                    fillOpacity: 0.16,
+                    interactive: false,
+                }).addTo(map);
+            } else {
+                currentLocationAccuracyCircle.setLatLng(coordinates);
+                currentLocationAccuracyCircle.setRadius(accuracyMeters);
+            }
+        } else if (currentLocationAccuracyCircle) {
+            currentLocationAccuracyCircle.setLatLng(coordinates);
+        }
+    };
+
     const centerOnCurrentLocation = () => {
+        const applyResolvedPosition = (position, message) => {
+            const coordinates = [
+                position.coords.latitude,
+                position.coords.longitude,
+            ];
+
+            currentUserLocation = coordinates;
+            currentUserLocationAccuracy = Number(position.coords.accuracy);
+            storeGeolocation(coordinates);
+            updateCurrentLocationOverlay(coordinates, currentUserLocationAccuracy);
+            applyMapView(coordinates, userZoom, message, true);
+        };
+
         const applyResolvedLocation = (coordinates, message) => {
             currentUserLocation = coordinates;
             storeGeolocation(coordinates);
+            updateCurrentLocationOverlay(coordinates, currentUserLocationAccuracy);
             applyMapView(coordinates, userZoom, message, true);
         };
 
@@ -655,11 +709,8 @@
 
         navigator.geolocation.getCurrentPosition(
             (position) => {
-                applyResolvedLocation(
-                    [
-                        position.coords.latitude,
-                        position.coords.longitude,
-                    ],
+                applyResolvedPosition(
+                    position,
                     'Map centered on your current location.'
                 );
             },
@@ -1230,6 +1281,12 @@
         }
 
         currentUserLocation = storedGeolocation;
+        if (storedGeolocation) {
+            currentLocationMarker = L.marker(storedGeolocation, {
+                icon: createCurrentLocationIcon(),
+                keyboard: false,
+            }).addTo(map);
+        }
 
         if (!navigator.geolocation) {
             if (!storedMapView && !storedGeolocation) {
@@ -1277,7 +1334,9 @@
                 ];
 
                 currentUserLocation = userLocation;
+                currentUserLocationAccuracy = Number(position.coords.accuracy);
                 storeGeolocation(userLocation);
+                updateCurrentLocationOverlay(userLocation, currentUserLocationAccuracy);
 
                 if (!storedMapView) {
                     applyMapView(
