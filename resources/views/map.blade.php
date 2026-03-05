@@ -10,7 +10,7 @@
     rel="stylesheet"
     href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css"
     crossorigin="">
-<link rel="stylesheet" href="{{ asset('css/map-page.css') }}">
+<link rel="stylesheet" href="{{ asset('css/map-page.css') }}?v={{ filemtime(public_path('css/map-page.css')) }}">
 @endpush
 
 @push('scripts')
@@ -27,7 +27,7 @@
 <script
     src="https://unpkg.com/supercluster@8.0.1/dist/supercluster.min.js"
     crossorigin=""></script>
-<script src="{{ asset('js/map-page.js') }}"></script>
+<script src="{{ asset('js/map-page.js') }}?v={{ filemtime(public_path('js/map-page.js')) }}"></script>
 @endpush
 
 @section('content')
