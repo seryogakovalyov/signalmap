@@ -24,6 +24,9 @@
 <script
     src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"
     crossorigin=""></script>
+<script
+    src="https://unpkg.com/supercluster@8.0.1/dist/supercluster.min.js"
+    crossorigin=""></script>
 <script src="{{ asset('js/map-page.js') }}"></script>
 @endpush
 

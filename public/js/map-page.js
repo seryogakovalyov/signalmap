@@ -27,6 +27,7 @@
     const viewportStorageKey = 'civic-reports:last-map-view';
     const voteStorageKey = 'civic-reports:session-votes';
     const fetchDebounceMs = 200;
+    const maxPointFetchByZoom = (zoom) => (zoom <= 3 ? 2500 : zoom <= 5 ? 4000 : 7000);
     const categoryIcons = {
         community: '👥',
         environment: '🌿',
@@ -46,9 +47,12 @@
         attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
 
+    const supportsSupercluster = typeof window.Supercluster === 'function';
+    const clusterLayer = L.layerGroup().addTo(map);
     const markersLayer = L.layerGroup().addTo(map);
     const reportMarkers = new Map();
     const reportState = new Map();
+    let clusterIndex = null;
     let geocoderResultMarker = null;
     let draftMarker = null;
     let lastRequestedBbox = null;
@@ -56,6 +60,7 @@
     let fetchReportsTimer = null;
     let currentUserLocation = null;
     let suppressViewportPersistence = false;
+    let skipNextMoveendFetch = false;
 
     const mountZoomControl = () => {
         const nextPosition = mobileControlsMediaQuery.matches ? 'bottomleft' : 'bottomright';
@@ -174,6 +179,18 @@
                     label: 'Unverified',
                 };
         }
+    };
+
+    const createClusterIcon = (count) => {
+        const size = count < 20 ? 34 : count < 100 ? 40 : 48;
+        const label = count > 999 ? '999+' : String(count);
+        const sizeClass = count < 100 ? 'cluster-small' : count < 500 ? 'cluster-medium' : 'cluster-large';
+
+        return L.divIcon({
+            className: `map-cluster ${sizeClass}`,
+            html: `<div><span>${escapeHtml(label)}</span></div>`,
+            iconSize: [size, size],
+        });
     };
 
     const readVoteStore = () => {
@@ -310,20 +327,100 @@
         reportState.delete(reportId);
     };
 
+    const clearRenderedMarkers = () => {
+        reportMarkers.forEach((marker) => {
+            markersLayer.removeLayer(marker);
+        });
+        reportMarkers.clear();
+        clusterLayer.clearLayers();
+    };
+
+    const buildClusterIndex = () => {
+        if (!supportsSupercluster) {
+            return;
+        }
+
+        const points = Array.from(reportState.values())
+            .filter((report) => report.status !== 'resolved')
+            .map((report) => ({
+                type: 'Feature',
+                geometry: {
+                    type: 'Point',
+                    coordinates: [report.longitude, report.latitude],
+                },
+                properties: {
+                    reportId: report.id,
+                },
+            }));
+
+        clusterIndex = new window.Supercluster({
+            radius: 50,
+            maxZoom: 18,
+            minPoints: 2,
+        });
+        clusterIndex.load(points);
+    };
+
+    const renderViewportFromClusterIndex = () => {
+        if (!supportsSupercluster || !clusterIndex) {
+            return;
+        }
+
+        clearRenderedMarkers();
+
+        const bounds = map.getBounds();
+        const zoom = Math.round(map.getZoom());
+        const features = clusterIndex.getClusters(
+            [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
+            zoom
+        );
+
+        features.forEach((feature) => {
+            const [lng, lat] = feature.geometry.coordinates;
+            const properties = feature.properties || {};
+
+            if (properties.cluster) {
+                const marker = L.marker([lat, lng], {
+                    icon: createClusterIcon(properties.point_count || 0),
+                    keyboard: false,
+                });
+
+                marker.on('click', () => {
+                    const expansionZoom = clusterIndex.getClusterExpansionZoom(properties.cluster_id);
+                    map.setView([lat, lng], Math.min(expansionZoom, 19));
+                });
+                marker.addTo(clusterLayer);
+                return;
+            }
+
+            const reportId = Number(properties.reportId);
+            const report = reportState.get(reportId);
+
+            if (!report) {
+                return;
+            }
+
+            upsertMarker(report);
+        });
+    };
+
     const fetchReports = async () => {
         const bounds = map.getBounds();
+        const zoom = Math.round(map.getZoom());
         const bbox = [
             bounds.getSouthWest().lat,
             bounds.getSouthWest().lng,
             bounds.getNorthEast().lat,
             bounds.getNorthEast().lng,
         ].join(',');
+        const limit = maxPointFetchByZoom(zoom);
+        const requestKey = `${bbox}|z:${zoom}|l:${limit}`;
 
-        if (bbox === lastRequestedBbox) {
+        if (requestKey === lastRequestedBbox) {
             return;
         }
 
-        lastRequestedBbox = bbox;
+        lastRequestedBbox = requestKey;
 
         if (fetchReportsController) {
             fetchReportsController.abort();
@@ -331,7 +428,11 @@
 
         fetchReportsController = new AbortController();
 
-        const response = await fetch(`/api/reports?bbox=${encodeURIComponent(bbox)}`, {
+        const params = new URLSearchParams({
+            bbox,
+            limit: String(limit),
+        });
+        const response = await fetch(`/api/reports?${params.toString()}`, {
             signal: fetchReportsController.signal,
         });
 
@@ -340,23 +441,22 @@
         }
 
         const payload = await response.json();
-        const nextIds = new Set();
-
-        payload.data.forEach((report) => {
-            if (report.status === 'resolved') {
-                removeMarker(report.id);
-                return;
-            }
-
-            nextIds.add(report.id);
-            upsertMarker(report);
-        });
-
-        Array.from(reportMarkers.keys()).forEach((reportId) => {
-            if (!nextIds.has(reportId)) {
-                removeMarker(reportId);
+        reportState.clear();
+        (Array.isArray(payload.data) ? payload.data : []).forEach((report) => {
+            if (report.status !== 'resolved') {
+                reportState.set(report.id, report);
             }
         });
+
+        if (supportsSupercluster) {
+            buildClusterIndex();
+            renderViewportFromClusterIndex();
+        } else {
+            clearRenderedMarkers();
+            reportState.forEach((report) => {
+                upsertMarker(report);
+            });
+        }
 
         fetchReportsController = null;
     };
@@ -933,13 +1033,26 @@
 
     map.on('zoomend', () => {
         persistCurrentMapView();
+
+        if (supportsSupercluster && clusterIndex) {
+            renderViewportFromClusterIndex();
+        }
     });
 
     map.on('moveend', () => {
+        if (skipNextMoveendFetch) {
+            skipNextMoveendFetch = false;
+            return;
+        }
+
         scheduleFetchReports();
     });
 
     map.on('popupopen', (event) => {
+        // Leaflet autopan fires moveend when popup opens near map edge.
+        // Skip one fetch cycle to avoid immediate layer re-render that closes the popup.
+        skipNextMoveendFetch = true;
+
         const popupRoot = event.popup.getElement();
 
         if (!popupRoot) {
@@ -1037,6 +1150,10 @@
 
                 if (body.data.status === 'resolved') {
                     removeMarker(reportId);
+                    if (supportsSupercluster) {
+                        buildClusterIndex();
+                        renderViewportFromClusterIndex();
+                    }
                     map.closePopup();
                     return;
                 }
@@ -1195,6 +1312,10 @@
 
             if (createdReport.status !== 'resolved') {
                 upsertMarker(createdReport);
+                if (supportsSupercluster) {
+                    buildClusterIndex();
+                    renderViewportFromClusterIndex();
+                }
             }
 
             hint.textContent = 'Report submitted. The community can now verify or clear it.';
