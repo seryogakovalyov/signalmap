@@ -232,19 +232,21 @@
             <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
                 <button
                     type="button"
+                    class="report-popup-action report-popup-action-confirm"
                     data-vote-action="confirm"
                     data-report-id="${report.id}"
                     ${hasVotedForAction(report.id, 'confirm') || !report.can_confirm ? 'disabled' : ''}
-                    style="border:0;border-radius:999px;padding:0.55rem 0.85rem;background:#0f766e;color:#fff;font:inherit;font-weight:700;cursor:pointer;"
+                    style="border:0;border-radius:999px;padding:0.55rem 0.85rem;color:#fff;font:inherit;font-weight:700;"
                 >
                     Confirm
                 </button>
                 <button
                     type="button"
+                    class="report-popup-action report-popup-action-clear"
                     data-vote-action="clear"
                     data-report-id="${report.id}"
                     ${hasVotedForAction(report.id, 'clear') || report.status === 'resolved' ? 'disabled' : ''}
-                    style="border:0;border-radius:999px;padding:0.55rem 0.85rem;background:#92400e;color:#fff;font:inherit;font-weight:700;cursor:pointer;"
+                    style="border:0;border-radius:999px;padding:0.55rem 0.85rem;color:#fff;font:inherit;font-weight:700;"
                 >
                     Gone
                 </button>
@@ -944,75 +946,84 @@
             return;
         }
 
-        popupRoot.querySelectorAll('[data-vote-action]').forEach((button) => {
-            button.addEventListener('click', async () => {
-                const reportId = Number(button.dataset.reportId);
-                const voteAction = button.dataset.voteAction;
+        if (popupRoot.dataset.voteHandlerBound === '1') {
+            return;
+        }
 
-                if (!reportId || !voteAction) {
-                    return;
-                }
+        popupRoot.dataset.voteHandlerBound = '1';
+        popupRoot.addEventListener('click', async (clickEvent) => {
+            const button = clickEvent.target.closest('[data-vote-action]');
 
-                if (hasVotedForAction(reportId, voteAction)) {
-                    return;
-                }
+            if (!button || !popupRoot.contains(button)) {
+                return;
+            }
 
-                popupRoot.querySelectorAll('[data-vote-action]').forEach((control) => {
-                    control.disabled = true;
+            const reportId = Number(button.dataset.reportId);
+            const voteAction = button.dataset.voteAction;
+
+            if (!reportId || !voteAction) {
+                return;
+            }
+
+            if (hasVotedForAction(reportId, voteAction)) {
+                return;
+            }
+
+            popupRoot.querySelectorAll('[data-vote-action]').forEach((control) => {
+                control.disabled = true;
+            });
+
+            try {
+                const response = await fetch(`/api/reports/${reportId}/${voteAction}`, {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                    },
                 });
 
-                try {
-                    const response = await fetch(`/api/reports/${reportId}/${voteAction}`, {
-                        method: 'POST',
-                        headers: {
-                            Accept: 'application/json',
-                        },
-                    });
+                const body = await response.json();
 
-                    const body = await response.json();
+                if (response.status === 409 || response.status === 403) {
+                    if (response.status === 409) {
+                        rememberVote(reportId, voteAction);
+                        updateMarkerPopup(reportId);
+                    }
 
-                    if (response.status === 409 || response.status === 403) {
-                        if (response.status === 409) {
-                            rememberVote(reportId, voteAction);
+                    if (response.status === 403 && voteAction === 'confirm') {
+                        const currentReport = reportState.get(reportId);
+
+                        if (currentReport) {
+                            currentReport.can_confirm = false;
+                            reportState.set(reportId, currentReport);
                             updateMarkerPopup(reportId);
                         }
-
-                        if (response.status === 403 && voteAction === 'confirm') {
-                            const currentReport = reportState.get(reportId);
-
-                            if (currentReport) {
-                                currentReport.can_confirm = false;
-                                reportState.set(reportId, currentReport);
-                                updateMarkerPopup(reportId);
-                            }
-                        }
-
-                        showMessage(errorBox, body.message || 'This action is not available for this report.');
-                        return;
                     }
 
-                    if (!response.ok) {
-                        throw new Error(body.message || 'Unable to record your vote.');
-                    }
-
-                    rememberVote(reportId, voteAction);
-
-                    if (body.data.status === 'resolved') {
-                        removeMarker(reportId);
-                        map.closePopup();
-                        return;
-                    }
-
-                    reportState.set(reportId, body.data);
-                    updateMarkerPopup(reportId);
-                } catch (error) {
-                    popupRoot.querySelectorAll('[data-vote-action]').forEach((control) => {
-                        control.disabled = false;
-                    });
-
-                    showMessage(errorBox, error.message || 'Unable to record your vote.');
+                    showMessage(errorBox, body.message || 'This action is not available for this report.');
+                    return;
                 }
-            });
+
+                if (!response.ok) {
+                    throw new Error(body.message || 'Unable to record your vote.');
+                }
+
+                rememberVote(reportId, voteAction);
+
+                if (body.data.status === 'resolved') {
+                    removeMarker(reportId);
+                    map.closePopup();
+                    return;
+                }
+
+                reportState.set(reportId, body.data);
+                updateMarkerPopup(reportId);
+            } catch (error) {
+                popupRoot.querySelectorAll('[data-vote-action]').forEach((control) => {
+                    control.disabled = false;
+                });
+
+                showMessage(errorBox, error.message || 'Unable to record your vote.');
+            }
         });
     });
 
