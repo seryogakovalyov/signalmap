@@ -269,6 +269,7 @@ textarea {
     align-items: center;
     margin: 0;
     gap: 0.28rem;
+    min-width: 0;
 }
 
 .leaflet-control-geocoder .leaflet-control-geocoder-alternatives {
@@ -278,6 +279,7 @@ textarea {
 .leaflet-control-geocoder-form input {
     width: 100%;
     max-width: 100%;
+    min-width: 0;
     height: 2.35rem;
     border: 0;
     border-radius: 12px;
@@ -598,7 +600,9 @@ textarea {
 @media (max-width: 768px) {
     .leaflet-control-container .leaflet-top.leaflet-left,
     .leaflet-control-container .leaflet-left.leaflet-top {
-        padding: 0.6rem 0 0 0.6rem;
+        left: 0.6rem;
+        right: 0.6rem;
+        padding: 0.6rem 0 0;
     }
 
     .leaflet-control-container .leaflet-bottom.leaflet-left,
@@ -612,7 +616,8 @@ textarea {
     }
 
     .leaflet-control-geocoder {
-        width: min(320px, calc(100vw - 1.2rem));
+        width: 100%;
+        max-width: none;
     }
 
     .leaflet-control-geocoder-form input {
@@ -627,7 +632,8 @@ textarea {
 
 @media (max-width: 600px) {
     .leaflet-control-geocoder {
-        max-width: calc(100vw - 2.3rem);
+        width: 100%;
+        max-width: none;
     }
 
     .geocoder-suggestions {
