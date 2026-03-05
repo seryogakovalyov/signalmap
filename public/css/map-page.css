@@ -8,6 +8,7 @@
     --primary: #0f766e;
     --primary-dark: #115e59;
     --danger: #b91c1c;
+    --map-control-border: rgba(0, 0, 0, 0.2);
 }
 
 * {
@@ -215,10 +216,10 @@ textarea {
 }
 
 .map-location-button {
-    border: 1px solid rgba(148, 163, 184, 0.35);
+    border: 2px solid var(--map-control-border);
     border-radius: 999px;
-    width: 40px;
-    height: 40px;
+    width: 43px;
+    height: 43px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -253,7 +254,7 @@ textarea {
     width: min(320px, calc(100vw - 2.5rem));
     max-width: 320px;
     padding: 0.28rem;
-    border: 1px solid rgba(148, 163, 184, 0.35);
+    border: 1px solid var(--map-control-border);
     border-radius: 16px;
     overflow: visible;
     box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16);
@@ -365,7 +366,7 @@ textarea {
 }
 
 .leaflet-control-zoom.leaflet-bar {
-    border: 1px solid rgba(148, 163, 184, 0.35);
+    border: 2px solid var(--map-control-border);
     border-radius: 14px;
     overflow: hidden;
     box-shadow: 0 10px 22px rgba(15, 23, 42, 0.14);
@@ -375,7 +376,7 @@ textarea {
     width: 2.45rem;
     height: 2.45rem;
     line-height: 2.45rem;
-    border-color: rgba(148, 163, 184, 0.25);
+    border-color: var(--map-control-border);
     color: #0f172a;
     background: #ffffff;
 }
