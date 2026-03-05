@@ -62,6 +62,7 @@
     let currentUserLocation = null;
     let suppressViewportPersistence = false;
     let skipNextMoveendFetch = false;
+    let skipPopupRestoreOnce = false;
 
     const mountZoomControl = () => {
         const nextPosition = mobileControlsMediaQuery.matches ? 'bottomleft' : 'bottomright';
@@ -337,7 +338,13 @@
     };
 
     const getOpenedPopupReportId = () => {
-        const popupElement = map._popup?.getElement?.();
+        const popup = map._popup;
+
+        if (!popup || !popup.isOpen()) {
+            return null;
+        }
+
+        const popupElement = popup.getElement?.();
 
         if (!popupElement) {
             return null;
@@ -424,7 +431,8 @@
     };
 
     const fetchReports = async () => {
-        const openedPopupReportId = getOpenedPopupReportId();
+        const openedPopupReportId = skipPopupRestoreOnce ? null : getOpenedPopupReportId();
+        skipPopupRestoreOnce = false;
         const bounds = map.getBounds();
         const zoom = Math.round(map.getZoom());
         const bbox = [
@@ -1047,6 +1055,8 @@
     mountZoomControl();
 
     map.on('click', (event) => {
+        // User clicked the map background intentionally; do not auto-restore a previously opened popup.
+        skipPopupRestoreOnce = true;
         clearMessages();
         setDraftCoordinates(event.latlng);
     });
@@ -1193,6 +1203,10 @@
                 showMessage(errorBox, error.message || 'Unable to record your vote.');
             }
         });
+    });
+
+    map.on('popupclose', () => {
+        skipPopupRestoreOnce = true;
     });
 
     const initializeMapLocation = () => {
