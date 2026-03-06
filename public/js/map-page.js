@@ -282,9 +282,9 @@
             </div>
             ${
                 !report.can_confirm
-                    ? '<div style="margin-top:0.5rem;font-size:0.78rem;color:#6b7280;">You cannot confirm your own report.</div>'
+                    ? '<div style="margin-top:0.5rem;font-size:0.78rem;color:#6b7280;">Your report needs confirmation from other users.</div>'
                     : hasVotedForAction(report.id, 'confirm') || hasVotedForAction(report.id, 'clear')
-                      ? '<div style="margin-top:0.5rem;font-size:0.78rem;color:#6b7280;">Repeated votes of the same type are blocked for this browser session.</div>'
+                      ? '<div style="margin-top:0.5rem;font-size:0.78rem;color:#6b7280;">You’ve already voted on this report.</div>'
                       : ''
             }
         </div>
