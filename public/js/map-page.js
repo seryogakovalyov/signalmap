@@ -258,7 +258,7 @@
                 <strong>Confirmations:</strong> ${escapeHtml(report.confirmations_count)}
             </div>
             <div style="margin-bottom:0.6rem;font-size:0.82rem;color:#6b7280">${escapeHtml(formatDate(report.created_at))}</div>
-            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <div class="report-popup-actions">
                 <button
                     type="button"
                     class="report-popup-action report-popup-action-confirm"
