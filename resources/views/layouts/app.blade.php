@@ -11,12 +11,12 @@
     <title>SignalMap — Community Reporting Map</title>
     <meta
         name="description"
-        content="SignalMap is a community-powered map where people can report real-world events and verify them together.">
+        content="SignalMap is a community-powered civic map where people can report real-world events, view local incidents, and help verify or resolve reports together in real time.">
 
     <meta property="og:title" content="SignalMap — Community Reporting Map">
     <meta
         property="og:description"
-        content="A simple civic map where users can report events and the community can confirm or resolve them.">
+        content="SignalMap is a community-powered civic map where people can report real-world events, view local incidents, and help verify or resolve reports together in real time.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="{{ $metaUrl }}">
     <meta property="og:image" content="{{ $metaImage }}">
