@@ -706,6 +706,13 @@
     };
 
     const centerOnCurrentLocation = () => {
+        if (map._popup?.isOpen()) {
+            // "Return to my location" is a deliberate recenter action:
+            // close any opened report popup and prevent immediate auto-restore.
+            skipPopupRestoreOnce = true;
+            map.closePopup();
+        }
+
         const applyResolvedPosition = (position, message) => {
             const coordinates = [
                 position.coords.latitude,
