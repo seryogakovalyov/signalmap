@@ -526,7 +526,11 @@
         }
 
         if (popupReportIdToPreserve && reportMarkers.has(popupReportIdToPreserve)) {
-            reportMarkers.get(popupReportIdToPreserve)?.openPopup();
+            const currentlyOpenedPopupReportId = getOpenedPopupReportId();
+
+            if (currentlyOpenedPopupReportId !== popupReportIdToPreserve) {
+                reportMarkers.get(popupReportIdToPreserve)?.openPopup();
+            }
         }
 
         fetchReportsController = null;
