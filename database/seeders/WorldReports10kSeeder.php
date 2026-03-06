@@ -11,7 +11,7 @@ use Illuminate\Support\Str;
 
 class WorldReports10kSeeder extends Seeder
 {
-    private const TOTAL_REPORTS = 100000;
+    private const TOTAL_REPORTS = 1000;
     private const BATCH_SIZE = 1000;
 
     /**
