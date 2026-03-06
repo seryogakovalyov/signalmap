@@ -322,7 +322,10 @@
         const marker = L.marker([report.latitude, report.longitude], {
             icon: createCategoryIcon(color, icon),
         })
-            .bindPopup(markerPopup(report))
+            .bindPopup(markerPopup(report), {
+                maxWidth: 320,
+                maxHeight: 300,
+            })
             .addTo(markersLayer);
 
         reportMarkers.set(report.id, marker);
