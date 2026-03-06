@@ -20,8 +20,8 @@
     const titleInput = form.querySelector('input[name="title"]');
     const descriptionInput = form.querySelector('textarea[name="description"]');
     const categoryInput = form.querySelector('select[name="category_id"]');
-    const defaultCenter = [40.7128, -74.0060];
-    const defaultZoom = 12;
+    const defaultCenter = [20, 0];
+    const defaultZoom = 2;
     const userZoom = 14;
     const geolocationStorageKey = 'civic-reports:last-known-geolocation';
     const viewportStorageKey = 'civic-reports:last-map-view';
@@ -585,23 +585,51 @@
 
             const parsedValue = JSON.parse(rawValue);
 
+            // Backward compatibility with legacy [lat, lng] format.
             if (
-                !Array.isArray(parsedValue) ||
-                parsedValue.length !== 2 ||
-                !parsedValue.every((value) => Number.isFinite(value))
+                Array.isArray(parsedValue) &&
+                parsedValue.length === 2 &&
+                parsedValue.every((value) => Number.isFinite(value))
+            ) {
+                return {
+                    lat: parsedValue[0],
+                    lng: parsedValue[1],
+                    accuracy: null,
+                    timestamp: null,
+                };
+            }
+
+            if (
+                !parsedValue ||
+                typeof parsedValue !== 'object' ||
+                !Number.isFinite(parsedValue.lat) ||
+                !Number.isFinite(parsedValue.lng)
             ) {
                 return null;
             }
 
-            return parsedValue;
+            return {
+                lat: Number(parsedValue.lat),
+                lng: Number(parsedValue.lng),
+                accuracy: Number.isFinite(parsedValue.accuracy) ? Number(parsedValue.accuracy) : null,
+                timestamp: Number.isFinite(parsedValue.timestamp) ? Number(parsedValue.timestamp) : null,
+            };
         } catch (error) {
             return null;
         }
     };
 
-    const storeGeolocation = (coordinates) => {
+    const storeGeolocation = (coordinates, accuracyMeters = null) => {
         try {
-            window.localStorage.setItem(geolocationStorageKey, JSON.stringify(coordinates));
+            window.localStorage.setItem(
+                geolocationStorageKey,
+                JSON.stringify({
+                    lat: Number(Number(coordinates[0]).toFixed(7)),
+                    lng: Number(Number(coordinates[1]).toFixed(7)),
+                    accuracy: Number.isFinite(accuracyMeters) ? Number(accuracyMeters) : null,
+                    timestamp: Date.now(),
+                })
+            );
         } catch (error) {
             // Ignore storage failures; geolocation should still work without persistence.
         }
@@ -721,22 +749,10 @@
 
             currentUserLocation = coordinates;
             currentUserLocationAccuracy = Number(position.coords.accuracy);
-            storeGeolocation(coordinates);
+            storeGeolocation(coordinates, currentUserLocationAccuracy);
             updateCurrentLocationOverlay(coordinates, currentUserLocationAccuracy);
             applyMapView(coordinates, userZoom, message, true);
         };
-
-        const applyResolvedLocation = (coordinates, message) => {
-            currentUserLocation = coordinates;
-            storeGeolocation(coordinates);
-            updateCurrentLocationOverlay(coordinates, currentUserLocationAccuracy);
-            applyMapView(coordinates, userZoom, message, true);
-        };
-
-        if (currentUserLocation) {
-            applyResolvedLocation(currentUserLocation, 'Map centered on your current location.');
-            return;
-        }
 
         if (!navigator.geolocation) {
             showMessage(errorBox, 'Geolocation is unavailable in this browser.');
@@ -761,26 +777,6 @@
         );
     };
 
-    const getGeolocationPermissionState = async () => {
-        if (!navigator.permissions || !navigator.permissions.query) {
-            return null;
-        }
-
-        try {
-            const permission = await navigator.permissions.query({
-                name: 'geolocation',
-            });
-
-            return permission.state;
-        } catch (error) {
-            return null;
-        }
-    };
-
-    const requestCurrentPosition = (options) => new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, options);
-    });
-
     const CurrentLocationControl = L.Control.extend({
         options: {
             position: 'bottomright',
@@ -788,8 +784,8 @@
         onAdd() {
             const button = L.DomUtil.create('button', 'map-location-button');
             button.type = 'button';
-            button.title = 'Return to my location';
-            button.setAttribute('aria-label', 'Return to my location');
+            button.title = 'Use my location';
+            button.setAttribute('aria-label', 'Use my location');
             button.innerHTML = `
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="1.8"></circle>
@@ -1303,91 +1299,73 @@
                 storedMapView.zoom,
                 'Map restored to your last viewed area. Use the location button to return to your position.'
             );
-        } else if (storedGeolocation) {
-            applyMapView(
-                storedGeolocation,
-                userZoom,
-                'Map centered on your last known location. Updating with your current position...'
-            );
         } else {
-            hint.textContent = 'Determining your location...';
+            applyMapView(
+                defaultCenter,
+                defaultZoom,
+                'Use "Use my location" to center the map on your position.'
+            );
         }
 
-        currentUserLocation = storedGeolocation;
         if (storedGeolocation) {
-            currentLocationMarker = L.marker(storedGeolocation, {
-                icon: createCurrentLocationIcon(),
-                keyboard: false,
-            }).addTo(map);
+            currentUserLocation = [storedGeolocation.lat, storedGeolocation.lng];
+            currentUserLocationAccuracy = storedGeolocation.accuracy;
+        }
+
+        if (storedGeolocation) {
+            updateCurrentLocationOverlay(
+                [storedGeolocation.lat, storedGeolocation.lng],
+                storedGeolocation.accuracy
+            );
         }
 
         if (!navigator.geolocation) {
-            if (!storedMapView && !storedGeolocation) {
-                applyMapView(
-                    defaultCenter,
-                    defaultZoom,
-                    'Geolocation is unavailable. Showing the default map area.'
-                );
-            }
-
             return;
         }
 
-        (async () => {
-            const permissionState = await getGeolocationPermissionState();
-            const primaryTimeout = permissionState === 'prompt' ? 30000 : 8000;
+        if (!navigator.permissions?.query) {
+            return;
+        }
 
-            const resolveLocation = async () => {
-                try {
-                    return await requestCurrentPosition({
+        navigator.permissions.query({ name: 'geolocation' })
+            .then((permission) => {
+                if (permission.state !== 'granted') {
+                    return;
+                }
+
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const userLocation = [
+                            position.coords.latitude,
+                            position.coords.longitude,
+                        ];
+
+                        currentUserLocation = userLocation;
+                        currentUserLocationAccuracy = Number(position.coords.accuracy);
+                        storeGeolocation(userLocation, currentUserLocationAccuracy);
+                        updateCurrentLocationOverlay(userLocation, currentUserLocationAccuracy);
+
+                        if (!storedMapView) {
+                            applyMapView(
+                                userLocation,
+                                userZoom,
+                                'Map centered on your current location. Click anywhere to create a report.'
+                            );
+                        }
+                    },
+                    () => {
+                        // Keep current map view unchanged on silent refresh failures.
+                    },
+                    {
                         enableHighAccuracy: false,
-                        timeout: primaryTimeout,
+                        timeout: 8000,
                         maximumAge: 300000,
-                    });
-                } catch (error) {
-                    // First prompt can exceed timeout while user interacts with the browser permission dialog.
-                    // Retry once with a relaxed timeout before falling back to the default map area.
-                    if (error?.code === 3) {
-                        return requestCurrentPosition({
-                            enableHighAccuracy: false,
-                            timeout: 60000,
-                            maximumAge: 300000,
-                        });
                     }
-
-                    throw error;
-                }
-            };
-
-            try {
-                const position = await resolveLocation();
-                const userLocation = [
-                    position.coords.latitude,
-                    position.coords.longitude,
-                ];
-
-                currentUserLocation = userLocation;
-                currentUserLocationAccuracy = Number(position.coords.accuracy);
-                storeGeolocation(userLocation);
-                updateCurrentLocationOverlay(userLocation, currentUserLocationAccuracy);
-
-                if (!storedMapView) {
-                    applyMapView(
-                        userLocation,
-                        userZoom,
-                        'Map centered on your current location. Click anywhere to create a report.'
-                    );
-                }
-            } catch (error) {
-                if (!storedMapView && !storedGeolocation) {
-                    applyMapView(
-                        defaultCenter,
-                        defaultZoom,
-                        'Location access was unavailable. Showing the default map area.'
-                    );
-                }
-            }
-        })();
+                );
+            })
+            .catch(() => {
+                // Keep current map view unchanged when Permissions API is unavailable.
+            });
     };
 
     form.addEventListener('submit', async (event) => {
