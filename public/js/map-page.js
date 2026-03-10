@@ -28,14 +28,6 @@
     const voteStorageKey = 'civic-reports:session-votes';
     const fetchDebounceMs = 200;
     const maxPointFetchByZoom = (zoom) => (zoom <= 3 ? 2500 : zoom <= 5 ? 4000 : 7000);
-    const categoryIcons = {
-        community: '👥',
-        environment: '🌿',
-        infrastructure: '🏢',
-        safety: '⚠️',
-        traffic: '🚗',
-    };
-
     const map = L.map('report-map', {
         zoomControl: false,
         closePopupOnClick: true,
@@ -110,7 +102,61 @@
         .trim()
         .toLowerCase()
         .replaceAll(/[^a-z0-9]+/g, '-');
-    const categoryEmoji = (categoryName) => categoryIcons[normalizeCategoryKey(categoryName)] || '📍';
+    const categoryIconSvg = (categoryName, className = 'category-icon-svg') => {
+        const categoryKey = normalizeCategoryKey(categoryName);
+
+        switch (categoryKey) {
+            case 'community':
+                return `
+                    <svg class="${className}" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="8" cy="9" r="2.75" stroke="currentColor" stroke-width="1.8"/>
+                        <circle cx="16" cy="9" r="2.75" stroke="currentColor" stroke-width="1.8"/>
+                        <path d="M4.5 17.25c.55-2.1 2.35-3.25 4.5-3.25s3.95 1.15 4.5 3.25" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        <path d="M10.5 17.25c.55-2.1 2.35-3.25 4.5-3.25s3.95 1.15 4.5 3.25" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                `;
+            case 'environment':
+                return `
+                    <svg class="${className}" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M18.5 5.5c-4.5.2-8.3 2.1-10.9 5.4-1.6 2.1-2.6 4.5-3.1 7.1 2.7-.4 5.2-1.4 7.4-3 3.5-2.6 5.4-6.3 5.7-10.9Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                        <path d="M8.5 14.5c1.7-.4 3.2-1.3 4.4-2.6 1.3-1.3 2.2-2.9 2.7-4.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                `;
+            case 'infrastructure':
+                return `
+                    <svg class="${className}" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M4.5 19.5h15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        <path d="M7.5 19.5V9.5l4.5-3 4.5 3v10" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                        <path d="M9.75 12.5h4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        <path d="M9.75 15.5h4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                `;
+            case 'safety':
+                return `
+                    <svg class="${className}" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M12 4.5 20 18.5H4L12 4.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                        <path d="M12 9v4.25" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        <circle cx="12" cy="16.25" r="1" fill="currentColor"/>
+                    </svg>
+                `;
+            case 'traffic':
+                return `
+                    <svg class="${className}" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M7.25 16.5h9.5c1.1 0 2-.9 2-2v-2.25c0-.44-.14-.86-.39-1.21l-1.4-1.95a2 2 0 0 0-1.62-.84H8.66a2 2 0 0 0-1.62.84l-1.4 1.95c-.25.35-.39.77-.39 1.21v2.25c0 1.1.9 2 2 2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                        <circle cx="8.5" cy="16.5" r="1.35" fill="currentColor"/>
+                        <circle cx="15.5" cy="16.5" r="1.35" fill="currentColor"/>
+                        <path d="M7.5 12.25h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                `;
+            default:
+                return `
+                    <svg class="${className}" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="1.8"/>
+                        <path d="M12 3.5v2.25M12 18.25v2.25M20.5 12h-2.25M5.75 12H3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                `;
+        }
+    };
 
     const renderLegend = () => {
         if (!legendElement) {
@@ -129,7 +175,7 @@
 
             const icon = document.createElement('span');
             icon.className = 'legend-icon';
-            icon.textContent = categoryEmoji(category.name);
+            icon.innerHTML = categoryIconSvg(category.name, 'legend-icon-svg');
             icon.setAttribute('aria-hidden', 'true');
 
             const label = document.createElement('span');
@@ -146,12 +192,12 @@
         className: 'category-marker-icon',
         html: `
             <span class="category-marker-dot" style="background:${escapeHtml(color)};">
-                <span class="category-marker-emoji" aria-hidden="true">${escapeHtml(icon)}</span>
+                <span class="category-marker-symbol" aria-hidden="true">${icon}</span>
             </span>
         `,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
-        popupAnchor: [0, -12],
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+        popupAnchor: [0, -13],
     });
 
     const createGeocoderResultIcon = () => L.divIcon({
@@ -246,7 +292,7 @@
         <div class="report-popup-content" style="min-width:240px;max-width:100%;">
             <strong class="report-popup-title" style="display:block;margin-bottom:0.4rem;">${escapeHtml(report.title)}</strong>
             <div style="display:flex;align-items:center;gap:0.35rem;margin-bottom:0.45rem;font-size:0.9rem;color:#475569;">
-                <span aria-hidden="true">${escapeHtml(categoryEmoji(report.category?.name))}</span>
+                <span class="popup-category-icon" aria-hidden="true">${categoryIconSvg(report.category?.name, 'popup-category-icon-svg')}</span>
                 <strong>${escapeHtml(report.category?.name || 'Uncategorized')}</strong>
             </div>
             <div class="report-popup-description" style="margin-bottom:0.6rem;line-height:1.45;">${escapeHtml(report.description)}</div>
@@ -309,7 +355,7 @@
         reportState.set(report.id, report);
 
         const color = report.category?.color || '#2563eb';
-        const icon = categoryEmoji(report.category?.name);
+        const icon = categoryIconSvg(report.category?.name, 'category-marker-icon-svg');
         const existingMarker = reportMarkers.get(report.id);
 
         if (existingMarker) {
